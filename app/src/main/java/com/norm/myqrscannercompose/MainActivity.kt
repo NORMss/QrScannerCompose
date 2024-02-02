@@ -14,21 +14,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.Text
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.norm.myqrscannercompose.data.MainDb
 import com.norm.myqrscannercompose.data.Product
 import com.norm.myqrscannercompose.ui.theme.MyQrScannerComposeTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -40,23 +41,40 @@ class MainActivity : ComponentActivity() {
     @OptIn(DelicateCoroutinesApi::class)
     private val scanLauncher = registerForActivityResult(ScanContract()) { result ->
         if (result.contents == null) {
-
-        } else {
             Toast.makeText(
                 this,
-                "Scan data: ${result.contents}",
+                "Scan data is null!",
                 Toast.LENGTH_SHORT
             )
                 .show()
-
-            GlobalScope.launch {
-                mainDb.dao.insertProduct(
-                    Product(
-                        null,
-                        "QR data",
-                        result.contents
+        } else {
+            CoroutineScope(Dispatchers.IO).launch {
+                val productByQr = mainDb.dao.getProductByQr(result.contents)
+                if (productByQr == null) {
+                    mainDb.dao.insertProduct(
+                        Product(
+                            null,
+                            "QR data",
+                            result.contents
+                        )
                     )
-                )
+                    runOnUiThread {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Item saved!",
+                            Toast.LENGTH_SHORT
+                        )
+                            .show()
+                    }
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Duplicated item!",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
             }
         }
     }
@@ -64,8 +82,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            val scope = rememberCoroutineScope()
-
             val productStateList = mainDb.dao.getAllProducts().collectAsState(initial = emptyList())
             MyQrScannerComposeTheme {
                 Column(
@@ -79,18 +95,26 @@ class MainActivity : ComponentActivity() {
                             .fillMaxHeight(0.9f)
                     ) {
                         items(productStateList.value) { product ->
-                            Text(
-                                text = product.numberQr,
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Center
-                            )
                             Spacer(modifier = Modifier.height(8.dp))
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 8.dp, end = 8.dp)
+                            ) {
+                                Text(
+                                    text = product.numberQr,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(8.dp),
+                                    textAlign = TextAlign.Center
+                                )
+                            }
                         }
                     }
                     Button(onClick = {
                         scan()
                     }) {
-                        Text(text = "Create data")
+                        Text(text = "Scan QR")
                     }
                 }
             }
